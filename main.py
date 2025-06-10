@@ -3,7 +3,7 @@ from playwright.async_api import async_playwright, Playwright
 import json
 
 async def run(playwright: Playwright):
-    browser = await playwright.chromium.launch()
+    browser = await playwright.chromium.launch(headless=False)
 
     context = await browser.new_context(
         locale='en-CA', 
@@ -15,25 +15,22 @@ async def run(playwright: Playwright):
     page = await context.new_page()
     await page.goto("https://icapital.com/careers/")
     print("Searching for jobs...")
-    await page.locator('#filter_office').select_option(label='CA ON - Toronto')
-    await page.locator('#filter_emp_type').select_option(label='Full-time')
-    all_jobs = page.locator('.job')
-    count = await all_jobs.count()
+    office_option_value = await page.locator("#filter_office >> option", has_text="CA ON - Toronto").get_attribute("value")
+    emp_type_option_value = await page.locator("#filter_emp_type >> option", has_text="Full-time").get_attribute("value")
+    ids = set(emp_type_option_value.split(',')) & set(office_option_value.split(','))
     job_result = []
-    for i in range(count):
-        el = all_jobs.nth(i)
-        display = await el.evaluate("e => getComputedStyle(e).display")
-        if display != 'grid':
-            continue
+    for id in ids:
+        el = page.locator(f'[data-id="{id}"]')
         title = await el.locator('.job_title').inner_text()
         position_unformatted = await el.locator('.display_location').inner_text()
         position = position_unformatted.removeprefix('Location: ')
         description_unformatted = await el.locator('.job_description').inner_text()
         description = description_unformatted.strip()
+        
         job_result.append({
-        "title": title,
-        "position": position,
-        "description": description
+            "title": title,
+            "position": position,
+            "description": description
         })
     with open("jobs.json", "w", encoding="utf-8") as f:
         json.dump(job_result, f, indent=2, ensure_ascii=False)
